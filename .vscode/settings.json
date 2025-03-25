@@ -1,0 +1,10 @@
+{
+  "eslint.format.enable": true,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+  "css.lint.unknownAtRules": "ignore", // Tailwind CSS 사용시
+  "cSpell.words": ["socketio"],
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint"
+  },
+}
