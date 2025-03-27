@@ -1,33 +1,29 @@
+import { createAdapter } from "@socket.io/mongo-adapter";
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
 
+import connectCollection from "@/lib/db";
+
 import setUpChatService from "./service/chatService";
+import setUpServerChatService from "./service/serverChatService";
 
 const app = express();
-
 const httpServer = createServer(app);
-const wsServer = new Server(httpServer, {
-  cors: { origin: "http://localhost:5173" },
+
+const wsServer = new Server(httpServer, { cors: { origin: "http://localhost:5173" }, path: "/chat" });
+
+const { chatCollection } = await connectCollection();
+
+const serverChatServer = new Server(httpServer, {
+  cors: { origin: ["https://admin.socket.io", "http://localhost:5173"], credentials: true },
+  path: "/server-chat",
+  adapter: createAdapter(chatCollection, {
+    addCreatedAtField: true, // 문서가 저장될 때 자동으로 createdAt 필드를 추가
+  }),
 });
 
-const chatNamespace = wsServer.of("/chat");
-setUpChatService(chatNamespace);
-
-// wsServer.on("connection", (socket) => {
-//   socket.on("select_service", (serviceName: string) => {
-//     const handler = serviceHandlers[serviceName];
-
-//     if (handler) {
-//       handler(socket);
-//     } else {
-//       socket.emit("error", `Unknown service: ${serviceName}`);
-//     }
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log(`Client disconnected: ${socket.id}`);
-//   });
-// });
+setUpChatService(wsServer); // basic ws server
+setUpServerChatService(serverChatServer); // mongodb adapted ws server
 
 httpServer.listen(3000, () => console.log(`ws server start`));
