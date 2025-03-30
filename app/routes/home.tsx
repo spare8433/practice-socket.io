@@ -13,6 +13,7 @@ function Home() {
       <CardContent className="space-y-4">
         <ServiceButton href="./chat-room">일반 채팅방 입장</ServiceButton>
         <ServiceButton href="./server-chat-room">서버 채팅방 입장</ServiceButton>
+        <ServiceButton href="./my-camera">내 카메라 확인</ServiceButton>
       </CardContent>
     </Card>
   );

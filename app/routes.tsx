@@ -5,5 +5,6 @@ export default [
     index("routes/home.tsx"),
     route("chat-room", "routes/chat-room.tsx"),
     route("server-chat-room", "routes/server-chat-room.tsx"),
+    route("my-camera", "routes/my-camera.tsx"),
   ]),
 ] satisfies RouteConfig;
