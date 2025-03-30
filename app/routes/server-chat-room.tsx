@@ -1,5 +1,5 @@
 import { ChevronLeft } from "lucide-react";
-import { SubmitHandler, useForm } from "react-hook-form";
+import { type SubmitHandler, useForm } from "react-hook-form";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { useChatSocketContext } from "@/contexts/chatContext";
-import { chatSocket } from "@/lib/socket";
+import { ServerChatSocketProvider, useServerChatSocketContext } from "@/contexts/serverChatContext";
+import { serverChatSocket } from "@/lib/socket";
 
-function Chat() {
+export default function ServerChatRoom() {
+  return (
+    <ServerChatSocketProvider>
+      <ServerChatRoomContents />
+    </ServerChatSocketProvider>
+  );
+}
+
+const ServerChatRoomContents = () => {
   const { isConnected, rooms, mode, currentRoom, chatMessages, exitCurrentRoom, sendMessage, enterRoom } =
-    useChatSocketContext();
+    useServerChatSocketContext();
   const navigate = useNavigate();
 
   const form = useForm({
@@ -35,9 +43,8 @@ function Chat() {
                   <ChevronLeft className="size-6" />
                 </Button>
 
-                <h1>일반 채팅방 목록</h1>
+                <h1>서버 채팅방 목록</h1>
               </div>
-
               <p>{isConnected ? "연결됨" : "연결끊김"}</p>
             </CardTitle>
           </CardHeader>
@@ -67,7 +74,7 @@ function Chat() {
                   <ChevronLeft className="size-6" />
                 </Button>
 
-                <h1>일반 채팅방 - {currentRoom}</h1>
+                <h1>서버 채팅방 - {currentRoom}</h1>
               </div>
             </CardTitle>
           </CardHeader>
@@ -75,7 +82,7 @@ function Chat() {
             <div className="bg-muted h-96 mb-4 rounded-2xl p-4 overflow-y-auto">
               {chatMessages.map(({ message, userId }) => (
                 <p key={new Date().toString + userId + message} className="mb-1">
-                  {userId === chatSocket.id ? "me" : userId}: {message}
+                  {userId === serverChatSocket.id ? "me" : userId}: {message}
                 </p>
               ))}
             </div>
@@ -99,6 +106,4 @@ function Chat() {
       )}
     </>
   );
-}
-
-export default Chat;
+};

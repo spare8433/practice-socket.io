@@ -37,7 +37,7 @@ export default tseslint.config(
       "react/jsx-first-prop-new-line": "error",
       "react/self-closing-comp": ["error", { component: true, html: true }],
       "react/no-unknown-property": "error",
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+      "react-refresh/only-export-components": ["off", { allowConstantExport: true }],
       "unused-imports/no-unused-imports": "error",
       "simple-import-sort/imports": "error",
       "simple-import-sort/exports": "error",

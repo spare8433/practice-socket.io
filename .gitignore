@@ -17,3 +17,7 @@ dist-ssr
 
 # env
 .env
+
+# React Router
+/.react-router/
+/build/
