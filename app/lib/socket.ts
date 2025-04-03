@@ -5,3 +5,4 @@ const URL = import.meta.env.NODE_ENV === "production" ? undefined : "http://loca
 
 export const chatSocket = io(URL, { path: "/chat" }); // "/chat" 서버에 연결
 export const serverChatSocket = io(URL, { path: "/server-chat" }); // "/chat" 서버에 연결
+export const videoChatSocket = io(URL, { path: "/server-video-chat" }); // "/chat" 서버에 연결

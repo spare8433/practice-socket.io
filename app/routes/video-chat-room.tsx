@@ -1,3 +1,4 @@
+/* eslint-disable jsx-a11y/media-has-caption */
 import { ChevronLeft, Mic, MicOff, Video, VideoOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -6,10 +7,53 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useVideoChatSocketContext, VideoChatSocketProvider } from "@/contexts/videoChatContext";
 
-function MyCamera() {
+export default function VideoChatRoom() {
+  return (
+    <VideoChatSocketProvider>
+      <VideoChatRoomContent />
+    </VideoChatSocketProvider>
+  );
+}
+
+const VideoChatRoomContent = () => {
   const navigate = useNavigate();
+  const { isConnected, mode, enterRoom, exitCurrentRoom } = useVideoChatSocketContext();
+
+  return (
+    <>
+      {mode === "lobby" && (
+        <Card className="w-2xl">
+          <CardHeader className="flex justify-between items-center">
+            <div className="flex space-x-3">
+              <Button type="button" size={null} variant="image-icon" onClick={() => navigate("/")}>
+                <ChevronLeft className="size-6" />
+              </Button>
+
+              <h1>화상 채팅방 로비</h1>
+            </div>
+            <p>{isConnected ? "연결됨" : "연결끊김"}</p>
+          </CardHeader>
+
+          <CardContent>
+            <Button type="button" className="w-full" onClick={enterRoom}>
+              입장
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {mode === "chat" && <VideChat />}
+    </>
+  );
+};
+
+const VideChat = () => {
+  const navigate = useNavigate();
+  const { otherStreams, exitCurrentRoom } = useVideoChatSocketContext();
   const videoRef = useRef<HTMLVideoElement>(null);
+
   const [myStream, setMyStream] = useState<MediaStream>();
   const [currentCamera, setCurrentCamera] = useState<{ deviceId: string; label: string } | null>(null);
   const [cameraList, setCameraList] = useState<MediaDeviceInfo[]>([]);
@@ -30,7 +74,6 @@ function MyCamera() {
       });
 
       const videoTrack = selectedStream.getVideoTracks()[0];
-
       videoTrack.enabled = !setCameraOff;
 
       selectedStream.getAudioTracks().forEach((track) => (track.enabled = !setIsMicOff));
@@ -60,10 +103,10 @@ function MyCamera() {
 
       if (!videoRef.current) return;
       videoRef.current.srcObject = myStream;
-      const { id, label } = myStream.getVideoTracks()[0];
 
+      const track = myStream.getVideoTracks()[0];
       setMyStream(myStream);
-      setCurrentCamera({ deviceId: id, label });
+      setCurrentCamera({ deviceId: track.id, label: track.label });
     } catch (e) {
       console.log(e);
     }
@@ -87,7 +130,6 @@ function MyCamera() {
     myStream.getAudioTracks().forEach((track) => (track.enabled = isMicOff));
     setIsMicOff((prev) => !prev);
   };
-
   return (
     <Card className="w-2xl">
       <CardHeader>
@@ -97,46 +139,62 @@ function MyCamera() {
               <ChevronLeft className="size-6" />
             </Button>
 
-            <h1>내 카메라 설정</h1>
+            <h1>화상 채팅방</h1>
           </div>
         </CardTitle>
       </CardHeader>
       <Separator />
       <CardContent className="space-y-4">
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video className="w-full shadow" ref={videoRef} autoPlay playsInline>
-          Camera
-        </video>
+        {/* my camera */}
+        <div>
+          <video className="w-full shadow" ref={videoRef} autoPlay playsInline />
 
-        <div className="flex justify-between">
-          <Select value={currentCamera?.deviceId} onValueChange={(v) => setCamera(v)}>
-            <SelectTrigger>{currentCamera?.label ?? "select camera"}</SelectTrigger>
-            <SelectContent>
-              {cameraList.map(({ deviceId, label }) => (
-                <SelectItem key={deviceId} value={deviceId}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex justify-between">
+            <Select value={currentCamera?.deviceId} onValueChange={(v) => setCamera(v)}>
+              <SelectTrigger>{currentCamera?.label ?? "select camera"}</SelectTrigger>
+              <SelectContent>
+                {cameraList.map(({ deviceId, label }) => (
+                  <SelectItem key={deviceId} value={deviceId}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <div className="flex space-x-2">
-            <Button className="rounded-full size-9 bg-muted" size={null} variant="image-icon" onClick={handleMuteClick}>
-              {isMicOff ? <MicOff className="size-6" /> : <Mic className="size-6" />}
-            </Button>
-            <Button
-              className="rounded-full size-9 bg-muted"
-              size={null}
-              variant="image-icon"
-              onClick={handleCameraClick}
-            >
-              {isCameraOff ? <VideoOff className="size-6" /> : <Video className="size-6" />}
-            </Button>
+            <div className="flex space-x-2">
+              <Button
+                className="rounded-full size-9 bg-muted"
+                size={null}
+                variant="image-icon"
+                onClick={handleMuteClick}
+              >
+                {isMicOff ? <MicOff className="size-6" /> : <Mic className="size-6" />}
+              </Button>
+              <Button
+                className="rounded-full size-9 bg-muted"
+                size={null}
+                variant="image-icon"
+                onClick={handleCameraClick}
+              >
+                {isCameraOff ? <VideoOff className="size-6" /> : <Video className="size-6" />}
+              </Button>
+            </div>
           </div>
         </div>
+
+        {/* other camera */}
+        {[...otherStreams].map(([id, stream]) => (
+          <video
+            className="w-full shadow"
+            key={id}
+            ref={(el) => {
+              if (el) el.srcObject = stream;
+            }}
+            autoPlay
+            playsInline
+          />
+        ))}
       </CardContent>
     </Card>
   );
-}
-
-export default MyCamera;
+};

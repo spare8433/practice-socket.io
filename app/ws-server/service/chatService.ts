@@ -1,12 +1,15 @@
+import { instrument } from "@socket.io/admin-ui";
 import { Server } from "socket.io";
 
-export default function setUpChatService(chatServer: Server) {
+export default function setChatService(chatServer: Server) {
   const rooms = new Map<string, Set<string>>();
   const defaultRooms = ["기본 채팅방", "프론트엔드 개발자 채팅방", "백엔드 개발자 채팅방"];
   defaultRooms.forEach((room) => rooms.set(room, new Set()));
 
+  instrument(chatServer, { auth: false, mode: "development" }); // admin mode
+
   chatServer.on("connection", (socket) => {
-    console.log(`🔵 Client connected: ${socket.id}`);
+    console.log(`🔵Client connected server chat: ${socket.id}`);
 
     // Room 목록 요청
     socket.on("get_rooms", () => {
