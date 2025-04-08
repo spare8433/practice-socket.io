@@ -1,6 +1,6 @@
 /* eslint-disable jsx-a11y/media-has-caption */
 import { ChevronLeft, Mic, MicOff, Video, VideoOff } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type FC, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,15 @@ export default function VideoChatRoom() {
 
 const VideoChatRoomContent = () => {
   const navigate = useNavigate();
-  const { isConnected, mode, enterRoom, exitCurrentRoom } = useVideoChatSocketContext();
+  const { isConnected, mode, getCameraList, getMicList, changeCamera, changeMic, enterRoom } =
+    useVideoChatSocketContext();
+
+  // initialize
+  useEffect(() => {
+    (async function init() {
+      await Promise.all([getCameraList(), getMicList()]);
+    })();
+  }, []);
 
   return (
     <>
@@ -37,6 +45,11 @@ const VideoChatRoomContent = () => {
           </CardHeader>
 
           <CardContent>
+            <div className="flex space-x-3 mb-4">
+              <CameraSelect onValueChange={changeCamera} />
+              <MicSelect onValueChange={changeMic} />
+            </div>
+
             <Button type="button" className="w-full" onClick={enterRoom}>
               입장
             </Button>
@@ -50,74 +63,11 @@ const VideoChatRoomContent = () => {
 };
 
 const VideChat = () => {
-  const navigate = useNavigate();
-  const { otherStreams, exitCurrentRoom } = useVideoChatSocketContext();
+  const { otherStreams, myStream, changeVideoTrack, changeAudioTrack, exitCurrentRoom } = useVideoChatSocketContext();
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const [myStream, setMyStream] = useState<MediaStream>();
-  const [currentCamera, setCurrentCamera] = useState<{ deviceId: string; label: string } | null>(null);
-  const [cameraList, setCameraList] = useState<MediaDeviceInfo[]>([]);
   const [isMicOff, setIsMicOff] = useState(false);
   const [isCameraOff, setCameraOff] = useState(false);
-
-  const setCamera = async (deviceId: string) => {
-    try {
-      if (!videoRef.current) return;
-
-      // 기존 스트림이 있으면 트랙 중지
-      if (myStream) myStream.getTracks().forEach((track) => track.stop());
-
-      // 선택된 캠 기준 스트림 가져오기
-      const selectedStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: { deviceId: { exact: deviceId } },
-      });
-
-      const videoTrack = selectedStream.getVideoTracks()[0];
-      videoTrack.enabled = !setCameraOff;
-
-      selectedStream.getAudioTracks().forEach((track) => (track.enabled = !setIsMicOff));
-      videoRef.current.srcObject = selectedStream;
-
-      setCurrentCamera({ deviceId, label: videoTrack.label });
-      setMyStream(selectedStream);
-
-      await getCameras();
-    } catch (e) {
-      console.log(e);
-    }
-  };
-
-  async function getCameras() {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      setCameraList(devices.filter((device) => device.kind === "videoinput"));
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
-  async function initializeStream() {
-    try {
-      const myStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-
-      if (!videoRef.current) return;
-      videoRef.current.srcObject = myStream;
-
-      const track = myStream.getVideoTracks()[0];
-      setMyStream(myStream);
-      setCurrentCamera({ deviceId: track.id, label: track.label });
-    } catch (e) {
-      console.log(e);
-    }
-  }
-
-  // initialize
-  useEffect(() => {
-    (async function init() {
-      await Promise.all([getCameras(), initializeStream()]);
-    })();
-  }, []);
 
   const handleCameraClick = () => {
     if (!myStream) return;
@@ -130,12 +80,21 @@ const VideChat = () => {
     myStream.getAudioTracks().forEach((track) => (track.enabled = isMicOff));
     setIsMicOff((prev) => !prev);
   };
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    videoRef.current.srcObject = myStream;
+  }, [myStream]);
+
+  console.log(otherStreams);
+  console.log(myStream);
+
   return (
     <Card className="w-2xl">
       <CardHeader>
         <CardTitle className="flex justify-between items-center">
           <div className="flex space-x-3">
-            <Button type="button" size={null} variant="image-icon" onClick={() => navigate("/")}>
+            <Button type="button" size={null} variant="image-icon" onClick={exitCurrentRoom}>
               <ChevronLeft className="size-6" />
             </Button>
 
@@ -150,16 +109,10 @@ const VideChat = () => {
           <video className="w-full shadow" ref={videoRef} autoPlay playsInline />
 
           <div className="flex justify-between">
-            <Select value={currentCamera?.deviceId} onValueChange={(v) => setCamera(v)}>
-              <SelectTrigger>{currentCamera?.label ?? "select camera"}</SelectTrigger>
-              <SelectContent>
-                {cameraList.map(({ deviceId, label }) => (
-                  <SelectItem key={deviceId} value={deviceId}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex space-x-2">
+              <CameraSelect onValueChange={changeVideoTrack} />
+              <MicSelect onValueChange={changeAudioTrack} />
+            </div>
 
             <div className="flex space-x-2">
               <Button
@@ -184,17 +137,66 @@ const VideChat = () => {
 
         {/* other camera */}
         {[...otherStreams].map(([id, stream]) => (
-          <video
-            className="w-full shadow"
-            key={id}
-            ref={(el) => {
-              if (el) el.srcObject = stream;
-            }}
-            autoPlay
-            playsInline
-          />
+          <VideoPlayer key={id} stream={stream} />
         ))}
       </CardContent>
     </Card>
+  );
+};
+
+const CameraSelect = ({ onValueChange }: { onValueChange: (v: string) => void }) => {
+  const {
+    cameraList,
+    currentMedia: { camera },
+  } = useVideoChatSocketContext();
+
+  return (
+    <Select defaultValue={camera?.deviceId} onValueChange={(v) => onValueChange(v)}>
+      <SelectTrigger>{camera ? cameraList.get(camera.deviceId) : "select camera"}</SelectTrigger>
+      <SelectContent>
+        {Array.from(cameraList).map(([deviceId, label]) => (
+          <SelectItem key={deviceId} value={deviceId}>
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
+
+const MicSelect = ({ onValueChange }: { onValueChange: (v: string) => void }) => {
+  const {
+    micList,
+    currentMedia: { mic },
+  } = useVideoChatSocketContext();
+
+  return (
+    <Select defaultValue={mic?.deviceId} onValueChange={(v) => onValueChange(v)}>
+      <SelectTrigger>{mic?.label ?? "select mic"}</SelectTrigger>
+      <SelectContent>
+        {Array.from(micList).map(([deviceId, label]) => (
+          <SelectItem key={deviceId} value={deviceId}>
+            {label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
+
+const VideoPlayer: FC<{ stream: MediaStream }> = ({ stream }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  console.log(stream);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  return (
+    <div>
+      <video ref={videoRef} autoPlay playsInline className="w-1/2 shadow" />
+    </div>
   );
 };

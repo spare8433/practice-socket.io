@@ -35,10 +35,11 @@ export default function setVideoChatService(chatServer: Server) {
     });
 
     // 채팅방 나가기
-    socket.on("leave_chat", (roomName: string, done: () => void) => {
+    socket.on("leave_chat", (roomName: string, streamId: string, done: () => void) => {
       socket.leave(roomName);
       done();
       console.log(`User left chat: ${socket.id}`);
+      socket.to(roomName).emit("user_leaved", streamId);
     });
 
     // 연결 종료시 room 에서 퇴장
