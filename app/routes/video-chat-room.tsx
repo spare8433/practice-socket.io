@@ -27,7 +27,7 @@ const VideoChatRoomContent = () => {
     (async function init() {
       await Promise.all([getCameraList(), getMicList()]);
     })();
-  }, []);
+  }, [getCameraList, getMicList]);
 
   return (
     <>
@@ -63,7 +63,7 @@ const VideoChatRoomContent = () => {
 };
 
 const VideChat = () => {
-  const { otherStreams, myStream, changeVideoTrack, changeAudioTrack, exitCurrentRoom } = useVideoChatSocketContext();
+  const { peerStreams, myStream, changeCamera, changeMic, exitCurrentRoom } = useVideoChatSocketContext();
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [isMicOff, setIsMicOff] = useState(false);
@@ -86,7 +86,7 @@ const VideChat = () => {
     videoRef.current.srcObject = myStream;
   }, [myStream]);
 
-  console.log(otherStreams);
+  console.log(peerStreams);
   console.log(myStream);
 
   return (
@@ -110,8 +110,8 @@ const VideChat = () => {
 
           <div className="flex justify-between">
             <div className="flex space-x-2">
-              <CameraSelect onValueChange={changeVideoTrack} />
-              <MicSelect onValueChange={changeAudioTrack} />
+              <CameraSelect onValueChange={changeCamera} />
+              <MicSelect onValueChange={changeMic} />
             </div>
 
             <div className="flex space-x-2">
@@ -136,7 +136,7 @@ const VideChat = () => {
         </div>
 
         {/* other camera */}
-        {[...otherStreams].map(([id, stream]) => (
+        {[...peerStreams].map(([id, stream]) => (
           <VideoPlayer key={id} stream={stream} />
         ))}
       </CardContent>

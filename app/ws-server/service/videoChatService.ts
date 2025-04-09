@@ -8,38 +8,39 @@ export default function setVideoChatService(chatServer: Server) {
     console.log(`🔵Client connected video chat ws server: ${socket.id}`);
 
     // 입장
-    socket.on("enter_room", (done: (roomName: string) => void) => {
+    socket.on("enter_room", (peerId: string, done: (roomName: string) => void) => {
       console.log(`${socket.id} enter room "videoChatRoom"`);
       socket.join("videoChatRoom");
 
       done("videoChatRoom");
-      socket.to("videoChatRoom").emit("user_joined", "videoChatRoom");
+      socket.to("videoChatRoom").emit("user_joined", "videoChatRoom", peerId);
     });
 
     // offer 전달
-    socket.on("send_offer", (roomName: string, offer: RTCSessionDescriptionInit) => {
+    socket.on("send_offer", (roomName: string, peerId: string, offer: RTCSessionDescriptionInit, done: () => void) => {
       console.log("receive_offer");
-      socket.to(roomName).emit("receive_offer", roomName, offer);
+      done();
+      socket.to(roomName).emit("receive_offer", roomName, peerId, offer);
     });
 
     // answer 전달
-    socket.on("send_answer", (roomName: string, answer: RTCSessionDescriptionInit) => {
+    socket.on("send_answer", (roomName: string, peerId: string, answer: RTCSessionDescriptionInit) => {
       console.log("send_answer");
-      socket.to(roomName).emit("receive_answer", answer);
+      socket.to(roomName).emit("receive_answer", peerId, answer);
     });
 
     // ice 전달
-    socket.on("send_ice", (roomName: string, ice: RTCIceCandidate) => {
+    socket.on("send_ice", (roomName: string, peerId: string, ice: RTCIceCandidate) => {
       console.log("send_ice");
-      socket.to(roomName).emit("receive_ice", ice);
+      socket.to(roomName).emit("receive_ice", peerId, ice);
     });
 
     // 채팅방 나가기
-    socket.on("leave_chat", (roomName: string, streamId: string, done: () => void) => {
+    socket.on("leave_chat", (roomName: string, peerId: string, done: () => void) => {
       socket.leave(roomName);
       done();
       console.log(`User left chat: ${socket.id}`);
-      socket.to(roomName).emit("user_leaved", streamId);
+      socket.to(roomName).emit("user_leaved", peerId);
     });
 
     // 연결 종료시 room 에서 퇴장
