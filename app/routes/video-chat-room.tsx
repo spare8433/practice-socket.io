@@ -1,6 +1,7 @@
 /* eslint-disable jsx-a11y/media-has-caption */
-import { ChevronLeft, Mic, MicOff, Video, VideoOff } from "lucide-react";
-import { type FC, useEffect, useRef, useState } from "react";
+import clsx from "clsx";
+import { ChevronLeft, Mic, MicOff, SquareUserRound, Video, VideoOff } from "lucide-react";
+import { type FC, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -19,15 +20,14 @@ export default function VideoChatRoom() {
 
 const VideoChatRoomContent = () => {
   const navigate = useNavigate();
-  const { isConnected, mode, getCameraList, getMicList, changeCamera, changeMic, enterRoom } =
-    useVideoChatSocketContext();
+  const { isConnected, mode, myStream, getMediaDevices, changeMediaDevice, enterRoom } = useVideoChatSocketContext();
 
   // initialize
   useEffect(() => {
     (async function init() {
-      await Promise.all([getCameraList(), getMicList()]);
+      await Promise.all([getMediaDevices("audio"), getMediaDevices("video")]);
     })();
-  }, [getCameraList, getMicList]);
+  }, [getMediaDevices]);
 
   return (
     <>
@@ -45,9 +45,12 @@ const VideoChatRoomContent = () => {
           </CardHeader>
 
           <CardContent>
+            <div className="mb-4 aspect-video">
+              <VideoPlayer stream={myStream} />
+            </div>
             <div className="flex space-x-3 mb-4">
-              <CameraSelect onValueChange={changeCamera} />
-              <MicSelect onValueChange={changeMic} />
+              <CameraSelect onValueChange={(v) => changeMediaDevice("video", v)} />
+              <MicSelect onValueChange={(v) => changeMediaDevice("audio", v)} />
             </div>
 
             <Button type="button" className="w-full" onClick={enterRoom}>
@@ -63,34 +66,21 @@ const VideoChatRoomContent = () => {
 };
 
 const VideChat = () => {
-  const { peerStreams, myStream, changeCamera, changeMic, exitCurrentRoom } = useVideoChatSocketContext();
+  const { peerStreams, myStream, userList, isMicOn, isCameraOn, changeMediaDevice, exitCurrentRoom, handleDeviceMute } =
+    useVideoChatSocketContext();
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  const [isMicOff, setIsMicOff] = useState(false);
-  const [isCameraOff, setCameraOff] = useState(false);
-
-  const handleCameraClick = () => {
-    if (!myStream) return;
-    myStream.getVideoTracks().forEach((track) => (track.enabled = isCameraOff));
-    setCameraOff((prev) => !prev);
-  };
-
-  const handleMuteClick = () => {
-    if (!myStream) return;
-    myStream.getAudioTracks().forEach((track) => (track.enabled = isMicOff));
-    setIsMicOff((prev) => !prev);
-  };
 
   useEffect(() => {
     if (!videoRef.current) return;
     videoRef.current.srcObject = myStream;
   }, [myStream]);
 
-  console.log(peerStreams);
-  console.log(myStream);
+  console.log("peerStreams : ", peerStreams);
+  console.log("myStream : ", myStream);
+  console.log("user list : ", userList);
 
   return (
-    <Card className="w-2xl">
+    <Card className="w-7xl">
       <CardHeader>
         <CardTitle className="flex justify-between items-center">
           <div className="flex space-x-3">
@@ -100,18 +90,21 @@ const VideChat = () => {
 
             <h1>화상 채팅방</h1>
           </div>
+          <div>{userList.size}</div>
         </CardTitle>
       </CardHeader>
       <Separator />
       <CardContent className="space-y-4">
         {/* my camera */}
         <div>
-          <video className="w-full shadow" ref={videoRef} autoPlay playsInline />
+          <div className="mb-4 aspect-video">
+            <VideoPlayer stream={myStream} />
+          </div>
 
           <div className="flex justify-between">
             <div className="flex space-x-2">
-              <CameraSelect onValueChange={changeCamera} />
-              <MicSelect onValueChange={changeMic} />
+              <CameraSelect onValueChange={(v) => changeMediaDevice("video", v)} />
+              <MicSelect onValueChange={(v) => changeMediaDevice("audio", v)} />
             </div>
 
             <div className="flex space-x-2">
@@ -119,26 +112,33 @@ const VideChat = () => {
                 className="rounded-full size-9 bg-muted"
                 size={null}
                 variant="image-icon"
-                onClick={handleMuteClick}
+                onClick={() => handleDeviceMute("audio")}
               >
-                {isMicOff ? <MicOff className="size-6" /> : <Mic className="size-6" />}
+                {isMicOn ? <Mic className="size-6" /> : <MicOff className="size-6" />}
               </Button>
               <Button
                 className="rounded-full size-9 bg-muted"
                 size={null}
                 variant="image-icon"
-                onClick={handleCameraClick}
+                onClick={() => handleDeviceMute("video")}
               >
-                {isCameraOff ? <VideoOff className="size-6" /> : <Video className="size-6" />}
+                {isCameraOn ? <Video className="size-6" /> : <VideoOff className="size-6" />}
               </Button>
             </div>
           </div>
         </div>
 
         {/* other camera */}
-        {[...peerStreams].map(([id, stream]) => (
-          <VideoPlayer key={id} stream={stream} />
-        ))}
+
+        {[...userList].map(([peerId]) => {
+          return peerStreams.has(peerId) ? (
+            <div key={peerId} className="relative w-60 h-40">
+              <VideoPlayer stream={peerStreams.get(peerId) as MediaStream} />
+            </div>
+          ) : (
+            <></>
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -187,6 +187,10 @@ const MicSelect = ({ onValueChange }: { onValueChange: (v: string) => void }) =>
 const VideoPlayer: FC<{ stream: MediaStream }> = ({ stream }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   console.log(stream);
+  console.log(stream.getAudioTracks()[0]);
+
+  const isAudioOn = stream.getAudioTracks()[0]?.enabled ?? false;
+  const isVideoOn = stream.getVideoTracks()[0]?.enabled ?? false;
 
   useEffect(() => {
     if (videoRef.current) {
@@ -195,8 +199,22 @@ const VideoPlayer: FC<{ stream: MediaStream }> = ({ stream }) => {
   }, [stream]);
 
   return (
-    <div>
-      <video ref={videoRef} autoPlay playsInline className="w-1/2 shadow" />
+    <div className="relative size-full">
+      <video ref={videoRef} autoPlay playsInline className={clsx("size-full shadow object-cover rounded-xl")} />
+
+      {!isVideoOn && (
+        <div className="absolute inset-0 bg-gray-500 flex items-center justify-center text-white text-xl font-bold rounded-xl">
+          <SquareUserRound className="size-1/2" />
+        </div>
+      )}
+
+      {!isAudioOn && (
+        <div className="w-full h-1/4 bg-gradient-to-t from-black/60 to-transparent absolute end-0 -translate-y-full flex justify-end items-end p-3 rounded-b-xl">
+          <div className="h-1/2">
+            <MicOff color="white" className="size-full" />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

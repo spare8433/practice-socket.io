@@ -1,0 +1,1 @@
+type MediaType = "audio" | "video";
