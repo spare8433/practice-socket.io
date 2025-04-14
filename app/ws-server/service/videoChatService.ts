@@ -6,12 +6,13 @@ import { BidirectionalMap } from "@/lib/bidirectionalMap";
 export default function setVideoChatService(chatServer: Server) {
   instrument(chatServer, { auth: false, mode: "development" }); // admin mode
   const userList = new BidirectionalMap(); // socket.id: peerId
+  const userDeviceState = new Map<string, MediaState>();
 
   chatServer.on("connection", (socket) => {
     console.log(`🔵Client connected video chat ws server: ${socket.id}`);
 
     // 입장
-    socket.on("enter_room", (peerId: string, done: (roomName: string) => void) => {
+    socket.on("enter_room", (peerId: string, mediaState: MediaState, done: (roomName: string) => void) => {
       console.log(`${socket.id} enter room "videoChatRoom"`);
       socket.join("videoChatRoom");
       userList.set(socket.id, peerId);
@@ -19,6 +20,7 @@ export default function setVideoChatService(chatServer: Server) {
 
       done("videoChatRoom");
       socket.to("videoChatRoom").emit("user_joined", "videoChatRoom", peerId);
+      socket.to("videoChatRoom").emit("receive_media_state", peerId, mediaState);
       chatServer.to("videoChatRoom").emit("users_changed", userList.toValueKeyArray());
     });
 
@@ -38,6 +40,12 @@ export default function setVideoChatService(chatServer: Server) {
     socket.on("send_ice", (roomName: string, peerId: string, ice: RTCIceCandidate) => {
       console.log("send_ice");
       socket.to(roomName).emit("receive_ice", peerId, ice);
+    });
+
+    // 미디어 상태 변경
+    socket.on("set_media_state", (roomName: string, peerId: string, mediaState: MediaState) => {
+      userDeviceState.set(socket.id, mediaState);
+      socket.to(roomName).emit("receive_media_state", peerId, mediaState);
     });
 
     // 채팅방 나가기
