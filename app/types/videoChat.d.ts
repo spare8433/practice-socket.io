@@ -1,9 +1,11 @@
 type MediaType = "audio" | "video";
 
-interface MediaInfo {
-  video: { deviceId: string; label: string } | null;
-  audio: { deviceId: string; label: string } | null;
+interface CurrentMediaInfo {
+  video: MediaInfo;
+  audio: MediaInfo;
 }
+
+type MediaInfo = { deviceId: string; label: string } | null;
 
 interface MediaState {
   video: boolean;

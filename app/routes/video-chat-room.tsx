@@ -20,15 +20,14 @@ export default function VideoChatRoom() {
 
 const VideoChatRoomContent = () => {
   const navigate = useNavigate();
-  const { isConnected, mode, myStream, isMicOn, isCameraOn, getMediaDevices, changeMediaDevice, enterRoom } =
-    useVideoChatSocketContext();
+  const { isConnected, mode, myStream, isMicOn, isCameraOn, enterRoom, setInitialMedia } = useVideoChatSocketContext();
 
   // initialize
   useEffect(() => {
     (async function init() {
-      await Promise.all([getMediaDevices("audio"), getMediaDevices("video")]);
+      await setInitialMedia();
     })();
-  }, [getMediaDevices]);
+  }, [setInitialMedia]);
 
   return (
     <>
@@ -49,10 +48,8 @@ const VideoChatRoomContent = () => {
             <div className="mb-4 aspect-video">
               <VideoPlayer stream={myStream} isAudioOn={isMicOn} isVideoOn={isCameraOn} />
             </div>
-            <div className="flex space-x-3 mb-4">
-              <CameraSelect onValueChange={(v) => changeMediaDevice("video", v)} />
-              <MicSelect onValueChange={(v) => changeMediaDevice("audio", v)} />
-            </div>
+
+            <MediaController />
 
             <Button type="button" className="w-full" onClick={enterRoom}>
               입장
@@ -67,18 +64,8 @@ const VideoChatRoomContent = () => {
 };
 
 const VideChat = () => {
-  const {
-    peerStreams,
-    myStream,
-    userList,
-    myPeerId,
-    isMicOn,
-    isCameraOn,
-    peerMediaStates,
-    changeMediaDevice,
-    exitCurrentRoom,
-    handleDeviceMute,
-  } = useVideoChatSocketContext();
+  const { peerStreams, myStream, userList, myPeerId, isMicOn, isCameraOn, peerMediaStates, exitCurrentRoom } =
+    useVideoChatSocketContext();
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -89,6 +76,8 @@ const VideChat = () => {
   // console.log("peerStreams : ", peerStreams);
   // console.log("peerMediaStates : ", peerMediaStates);
   // console.log("myStream : ", myStream);
+  console.log("audio track : ", getCurrentTrack(myStream, "audio"));
+  console.log("video track : ", getCurrentTrack(myStream, "video"));
   // console.log("user list : ", userList);
 
   const getGridClassName = (count: number) => {
@@ -141,66 +130,76 @@ const VideChat = () => {
 
       {/* content footer */}
       <div className="flex gap-x-4 h-16 px-4 justify-center items-center">
-        <CameraSelect onValueChange={(v) => changeMediaDevice("video", v)} />
-        <MicSelect onValueChange={(v) => changeMediaDevice("audio", v)} />
-        <Button
-          className="rounded-full size-9 bg-muted"
-          size={null}
-          variant="image-icon"
-          onClick={() => handleDeviceMute("audio")}
-        >
-          {isMicOn ? <Mic className="size-6" /> : <MicOff className="size-6" />}
-        </Button>
-        <Button
-          className="rounded-full size-9 bg-muted"
-          size={null}
-          variant="image-icon"
-          onClick={() => handleDeviceMute("video")}
-        >
-          {isCameraOn ? <Video className="size-6" /> : <VideoOff className="size-6" />}
-        </Button>
+        <MediaController />
       </div>
     </div>
   );
 };
 
-const CameraSelect = ({ onValueChange }: { onValueChange: (v: string) => void }) => {
-  const {
-    cameraList,
-    currentMedia: { video },
-  } = useVideoChatSocketContext();
+interface DeviceSelectProps {
+  deviceList: Map<string, string>;
+  current: { deviceId: string; label: string } | null;
+  placeholder: string;
+  onValueChange: (v: string) => void;
+}
 
+const DeviceSelect = ({ deviceList, current, placeholder, onValueChange }: DeviceSelectProps) => {
   return (
-    <Select defaultValue={video?.deviceId} onValueChange={(v) => onValueChange(v)}>
-      <SelectTrigger>{video ? video.label : "select camera"}</SelectTrigger>
+    <Select value={current?.deviceId} onValueChange={onValueChange}>
+      <SelectTrigger>{current?.label ?? placeholder}</SelectTrigger>
       <SelectContent>
-        {Array.from(cameraList).map(([deviceId, label]) => (
-          <SelectItem key={deviceId} value={deviceId}>
-            {label}
+        {deviceList.size > 0 ? (
+          Array.from(deviceList).map(([deviceId, label]) => (
+            <SelectItem key={deviceId} value={deviceId}>
+              {label}
+            </SelectItem>
+          ))
+        ) : (
+          <SelectItem disabled value="loading">
+            로딩 중...
           </SelectItem>
-        ))}
+        )}
       </SelectContent>
     </Select>
   );
 };
 
-const MicSelect = ({ onValueChange }: { onValueChange: (v: string) => void }) => {
-  const {
-    micList,
-    currentMedia: { audio },
-  } = useVideoChatSocketContext();
+const MediaController = () => {
+  const { cameraList, micList, currentMedia, isMicOn, isCameraOn, changeMediaDevice, handleDeviceMute } =
+    useVideoChatSocketContext();
+  const { audio, video } = currentMedia;
 
   return (
-    <Select defaultValue={audio?.deviceId} onValueChange={(v) => onValueChange(v)}>
-      <SelectTrigger>{audio?.label ?? "select mic"}</SelectTrigger>
-      <SelectContent>
-        {Array.from(micList).map(([deviceId, label]) => (
-          <SelectItem key={deviceId} value={deviceId}>
-            {label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div className="flex gap-x-4 h-16 px-4 justify-center items-center">
+      <DeviceSelect
+        current={video}
+        deviceList={cameraList}
+        placeholder="select camera"
+        onValueChange={(v) => changeMediaDevice("video", v)}
+      />
+      <DeviceSelect
+        current={audio}
+        deviceList={micList}
+        placeholder="select mic"
+        onValueChange={(v) => changeMediaDevice("audio", v)}
+      />
+      <Button
+        className="rounded-full size-9 bg-muted"
+        size={null}
+        variant="image-icon"
+        onClick={() => handleDeviceMute("audio")}
+      >
+        {isMicOn ? <Mic className="size-6" /> : <MicOff className="size-6" />}
+      </Button>
+      <Button
+        className="rounded-full size-9 bg-muted"
+        size={null}
+        variant="image-icon"
+        onClick={() => handleDeviceMute("video")}
+      >
+        {isCameraOn ? <Video className="size-6" /> : <VideoOff className="size-6" />}
+      </Button>
+    </div>
   );
 };
 

@@ -16,9 +16,9 @@ export default function setVideoChatService(chatServer: Server) {
       console.log(`${socket.id} enter room "videoChatRoom"`);
       socket.join("videoChatRoom");
       userList.set(socket.id, peerId);
-      console.log("current userList", userList.entries());
-
+      // console.log("current userList", userList.entries());
       done("videoChatRoom");
+
       socket.to("videoChatRoom").emit("user_joined", "videoChatRoom", peerId);
       socket.to("videoChatRoom").emit("receive_media_state", peerId, mediaState);
       chatServer.to("videoChatRoom").emit("users_changed", userList.toValueKeyArray());
@@ -51,19 +51,23 @@ export default function setVideoChatService(chatServer: Server) {
     // 채팅방 나가기
     socket.on("leave_chat", (roomName: string, peerId: string) => {
       socket.leave(roomName);
-      userList.deleteByValue(peerId);
+      userList.deleteByValue(peerId); // 사용자 목록 정리
+      userDeviceState.delete(socket.id); // 장치 상태 정리
       console.log(`User left chat: ${socket.id}`);
-      console.log("current userList", userList.entries());
+      // console.log("current userList", userList.entries());
+
       socket.to(roomName).emit("user_leaved", peerId);
-      chatServer.to("videoChatRoom").emit("users_changed", userList.toValueKeyArray());
+      socket.to("videoChatRoom").emit("users_changed", userList.toValueKeyArray());
     });
 
     // 연결 종료시 room 에서 퇴장
     socket.on("disconnecting", () => {
-      userList.deleteByKey(socket.id);
+      userList.deleteByKey(socket.id); // 사용자 목록 정리
+      userDeviceState.delete(socket.id); // 장치 상태 정리
       socket.rooms.forEach((room) => socket.leave(room));
-      console.log(userList.entries());
-      chatServer.to("videoChatRoom").emit("users_changed", userList.toValueKeyArray());
+      // console.log(userList.entries());
+
+      socket.to("videoChatRoom").emit("users_changed", userList.toValueKeyArray());
     });
   });
 }

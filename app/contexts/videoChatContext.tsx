@@ -10,7 +10,7 @@ interface VideoChatContextType {
   myStream: MediaStream;
   peerStreams: Map<string, MediaStream>;
   peerMediaStates: Map<string, MediaState>;
-  currentMedia: MediaInfo;
+  currentMedia: CurrentMediaInfo;
   cameraList: Map<string, string>;
   micList: Map<string, string>;
   myPeerId: string;
@@ -22,26 +22,31 @@ interface VideoChatContextType {
   getMediaDevices: (type: MediaType) => Promise<void>;
   changeMediaDevice: (type: MediaType, deviceId: string) => Promise<void>;
   handleDeviceMute: (type: MediaType) => void;
+  setInitialMedia: () => Promise<void>;
 }
 
 export const VideoChatSocketContext = createContext<VideoChatContextType | null>(null);
 
 export function VideoChatSocketProvider({ children }: { children: ReactNode }) {
-  const [isConnected, setIsConnected] = useState(videoChatSocket.connected);
-  const [mode, setMode] = useState<"lobby" | "chat">("lobby");
+  // media 관련
+  const [myStream, setMyStream] = useState<MediaStream>(new MediaStream());
   const [cameraList, setCameraList] = useState<Map<string, string>>(new Map());
   const [micList, setMicList] = useState<Map<string, string>>(new Map());
-  const [myStream, setMyStream] = useState<MediaStream>(new MediaStream());
+  const [currentMedia, setCurrentMedia] = useState<CurrentMediaInfo>({ video: null, audio: null });
+
+  // peer & room 관련
+  const [isConnected, setIsConnected] = useState(videoChatSocket.connected);
   const [myPeerId, setMyPeerId] = useState("");
-  const [currentMedia, setCurrentMedia] = useState<MediaInfo>({ video: null, audio: null });
+  const [userList, setUserList] = useState<Map<string, string>>(new Map());
   const [currentRoom, setCurrentRoom] = useState("");
   const [peerStreams, setPeerStreams] = useState<Map<string, MediaStream>>(new Map());
   const [peerMediaStates, setPeerMediaStates] = useState(new Map<string, MediaState>());
-  const [userList, setUserList] = useState<Map<string, string>>(new Map());
+  const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
+
+  // 기타
+  const [mode, setMode] = useState<"lobby" | "chat">("lobby");
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
-
-  const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
 
   async function changeMediaDevice(type: MediaType, deviceId: string) {
     try {
@@ -84,8 +89,48 @@ export function VideoChatSocketProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const setInitialMedia = useCallback(async () => {
+    const selectedStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+
+    // 장치 목록 배열
+    const videoDevices = devices.filter((device) => device.kind === "videoinput");
+    const audioDevices = devices.filter(
+      ({ kind, deviceId }) => kind === "audioinput" && deviceId !== "default" && deviceId !== "communications",
+    );
+
+    // 장치 목록 Map
+    const videoDeviceMap = new Map(videoDevices.map(({ deviceId, label }) => [deviceId, label]));
+    const audioDeviceMap = new Map(audioDevices.map(({ deviceId, label }) => [deviceId, label]));
+
+    // 현재 track
+    const currentAudioTrack = getCurrentTrack(selectedStream, "audio");
+    const currentVideoTrack = getCurrentTrack(selectedStream, "video");
+
+    setCameraList(videoDeviceMap);
+    setMicList(audioDeviceMap);
+    setMyStream(selectedStream);
+
+    const getMediaInfo = (track: MediaStreamTrack | undefined, deviceMap: Map<string, string>): MediaInfo => {
+      if (!track) return null;
+      const settings = track.getSettings();
+      const deviceId = settings.deviceId;
+      if (!deviceId) return null;
+      const label = deviceMap.get(deviceId) ?? track.label; // 실제 device label 과 track label 이 일부 차이가 있을 수 있음
+      return { deviceId, label };
+    };
+
+    const currentAudioInfo = getMediaInfo(currentAudioTrack, audioDeviceMap);
+    const currentVideoInfo = getMediaInfo(currentVideoTrack, videoDeviceMap);
+
+    setCurrentMedia({ audio: currentAudioInfo, video: currentVideoInfo });
+  }, []);
+
   const getMediaDevices = useCallback(async (type: MediaType) => {
     const devices = await navigator.mediaDevices.enumerateDevices();
+
+    console.log(devices);
+
     if (type === "audio") {
       const filteredDevices = devices.filter(
         ({ kind, deviceId }) => kind === "audioinput" && deviceId !== "default" && deviceId !== "communications",
@@ -101,16 +146,17 @@ export function VideoChatSocketProvider({ children }: { children: ReactNode }) {
     try {
       const track = getCurrentTrack(myStream, type);
       if (!track) throw new Error(`No current ${type} track found`);
-      track.enabled = !isCameraOn;
 
       const mediaState = { video: isCameraOn, audio: isMicOn };
       // device mute 여부 토글
       if (type === "audio") {
         setIsMicOn((prev) => !prev);
         mediaState.audio = !isMicOn;
+        track.enabled = !isMicOn;
       } else {
         setIsCameraOn((prev) => !prev);
         mediaState.video = !isCameraOn;
+        track.enabled = !isCameraOn;
       }
 
       videoChatSocket.emit("set_media_state", currentRoom, myPeerId, mediaState);
@@ -132,7 +178,6 @@ export function VideoChatSocketProvider({ children }: { children: ReactNode }) {
     setMode("lobby");
     setCurrentRoom("");
     setMyPeerId("");
-    setCurrentMedia({ video: null, audio: null });
 
     videoChatSocket.emit("leave_chat", currentRoom, myPeerId);
   }
@@ -287,8 +332,15 @@ export function VideoChatSocketProvider({ children }: { children: ReactNode }) {
     const onLeaveUser = (peerId: string) => {
       console.log("[socket.on]: user_leaved");
 
-      peerConnections.current.delete(peerId);
+      peerConnections.current.delete(peerId); // 퇴장 사용자 peerConnections 제거
+      // 퇴장 사용자 stream 제거
       setPeerStreams((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(peerId);
+        return newMap;
+      });
+      // 퇴장 사용자 미디어 장치 상태 제거
+      setPeerMediaStates((prev) => {
         const newMap = new Map(prev);
         newMap.delete(peerId);
         return newMap;
@@ -322,7 +374,7 @@ export function VideoChatSocketProvider({ children }: { children: ReactNode }) {
       videoChatSocket.off("users_changed", onChangedUsers);
       videoChatSocket.off("receive_media_state", onReceiveMediaState);
     };
-  }, [createPeerConnection, myPeerId, myStream]);
+  }, [createPeerConnection, myPeerId]);
 
   return (
     <VideoChatSocketContext.Provider
@@ -345,6 +397,7 @@ export function VideoChatSocketProvider({ children }: { children: ReactNode }) {
         exitCurrentRoom,
         changeMediaDevice,
         handleDeviceMute,
+        setInitialMedia,
       }}
     >
       {children}
